@@ -18,3 +18,10 @@
 - Small bugfix
 1.0.9
 - Fixed site changes
+1.1.0
+- Added context menu to list all seasons
+1.1.1
+- Added setting to force listing without thumbs
+1.1.2
+- Removed broken stream servers (HDS streams)
+-  added notification about selected stream server (HDS streams)

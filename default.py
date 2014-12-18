@@ -30,6 +30,7 @@ iconNTV = os.path.join(addonDir, 'iconNTV.png')
 opener = urllib2.build_opener()
 userAgent = "Mozilla/5.0 (Windows NT 5.1; rv:24.0) Gecko/20100101 Firefox/24.0"
 opener.addheaders = [('User-Agent', userAgent)]
+useNoThumbMode = addon.getSetting("useNoThumbMode") == "true"
 useThumbAsFanart = addon.getSetting("useThumbAsFanart") == "true"
 forceViewMode = addon.getSetting("forceView") == "true"
 viewMode = str(addon.getSetting("viewID"))
@@ -68,10 +69,10 @@ def index():
 
 
 def listChannel(urlMain, thumb):
-    if urlMain == urlMainRTL:
+    if urlMain == urlMainRTL and not useNoThumbMode:
         addDir(translation(30016), urlMain+"/newsuebersicht.php", "listShowsThumb", thumb)
         addDir(translation(30015), urlMain+"/sendung_a_z.php", "listShowsThumb", thumb)
-    elif urlMain in [urlMainVOX, urlMainNTV, urlMainRTLNitro]:
+    elif urlMain in [urlMainVOX, urlMainNTV, urlMainRTLNitro] and not useNoThumbMode:
         addDir(translation(30014), urlMain+"/sendung_a_z.php", "listShowsThumb", thumb)
     else:
         addDir(translation(30014), urlMain, "listShowsNoThumb", thumb)
@@ -105,10 +106,7 @@ def listShowsThumb(urlMain):
         thumb = match[0].replace("/216x122/", "/864x488/")
         if 'class="m03date">FREE' in entry or 'class="m03date">NEW' in entry:
             if url not in entries:
-                if url.endswith("gzsz.php"):
-                    addShowDir(title, url, 'listSeasons', thumb)
-                else:
-                    addShowDir(title, url, 'listVideos', thumb)
+                addShowDir(title, url, 'listVideos', thumb)
                 entries.append(url)
     xbmcplugin.endOfDirectory(pluginhandle)
     if forceViewMode:
@@ -126,11 +124,12 @@ def listShowsNoThumb(urlMain, thumb):
         if match:
             title = cleanTitle(match[0]).replace(" online ansehen", "")
             match = re.compile('href="(.+?)"', re.DOTALL).findall(entry)
-            url = urlMain+match[0]
-            if '>FREE<' in entry or '>NEW<' in entry:
-                if url not in entries:
-                    addShowDir(title, url, 'listVideos', thumb)
-                    entries.append(url)
+            if match and match[0].startswith("/"):
+                url = urlMain+match[0]
+                if '>FREE<' in entry or '>NEW<' in entry:
+                    if url not in entries:
+                        addShowDir(title, url, 'listVideos', thumb)
+                        entries.append(url)
     xbmcplugin.endOfDirectory(pluginhandle)
     if forceViewMode:
         xbmc.executebuiltin('Container.SetViewMode('+viewMode+')')
@@ -148,10 +147,7 @@ def listShowsFavs():
             url = url[:url.find("#")]
             thumb = line[line.find("###THUMB###=")+12:]
             thumb = thumb[:thumb.find("#")]
-            if url.endswith("gzsz.php"):
-                addShowRDir(title, urllib.unquote_plus(url), "listSeasons", thumb)
-            else:
-                addShowRDir(title, urllib.unquote_plus(url), "listVideos", thumb)
+            addShowRDir(title, urllib.unquote_plus(url), "listVideos", thumb)
         fh.close()
     xbmcplugin.endOfDirectory(pluginhandle)
     if forceViewMode:
@@ -162,12 +158,10 @@ def listSeasons(urlMain, thumb):
     content = opener.open(urlMain).read()
     matchUrl = re.compile('xajaxRequestUri="(.+?)"', re.DOTALL).findall(content)
     ajaxUrl = matchUrl[0]
-    matchParams = re.compile("<select onchange=\"xajax_show_top_and_movies.+?'(.+?)','(.+?)','(.+?)','(.+?)','(.+?)','(.+?)','(.+?)'", re.DOTALL).findall(content)
-    if matchParams:
-        match = re.compile("<div id=\"reiter.+?,'(.+?)','(.+?)'.+?<div class=\"m\">(.+?)<", re.DOTALL).findall(content)
-        for id1, id2, title in match:
-            args = "xajax=show_top_and_movies&xajaxr=&xajaxargs[]=0&xajaxargs[]="+id1+"&xajaxargs[]="+id2+"&xajaxargs[]="+matchParams[0][2]+"&xajaxargs[]="+matchParams[0][3]+"&xajaxargs[]="+matchParams[0][4]+"&xajaxargs[]="+matchParams[0][5]+"&xajaxargs[]="+matchParams[0][6]
-            addDir(title, ajaxUrl, 'listVideos', thumb, args)
+    match = re.compile("onclick=\"currentreiter=.*?;show_top_and_movies_wrapper\\((.+?),'(.+?)','(.+?)',(.+?),(.+?),(.+?),'','(.+?)', '', '(.+?)'\\);.*?<div class=\"m\">(.+?)</div>", re.DOTALL).findall(content)
+    for id1, id2, id3, id4, id5, id6, id7, id8, title in match:
+        args = "xajax=show_top_and_movies&xajaxr=&xajaxargs[]="+id1+"&xajaxargs[]="+id2+"&xajaxargs[]="+id3+"&xajaxargs[]="+id4+"&xajaxargs[]="+id5+"&xajaxargs[]="+id6+"&xajaxargs[]="+id7+"&xajaxargs[]="+id8
+        addDir(title, ajaxUrl, 'listVideos', thumb, args)
     xbmcplugin.endOfDirectory(pluginhandle)
     if forceViewMode:
         xbmc.executebuiltin('Container.SetViewMode('+viewMode+')')
@@ -400,7 +394,7 @@ def addShowDir(name, url, mode, iconimage, args="", type=""):
     if useThumbAsFanart and not iconimage.split(os.sep)[-1].startswith("icon"):
         liz.setProperty("fanart_image", iconimage)
     playListInfos = "###MODE###=ADD###TITLE###="+name+"###URL###="+urllib.quote_plus(url)+"###THUMB###="+iconimage+"###END###"
-    liz.addContextMenuItems([(translation(30024), 'RunPlugin('+getPluginUrl()+'/?mode=favs&url='+urllib.quote_plus(playListInfos)+')',)])
+    liz.addContextMenuItems([(translation(30026), 'Container.Update('+getPluginUrl()+'/?mode=listSeasons&url='+urllib.quote_plus(url)+"&thumb="+urllib.quote_plus(iconimage)+')',), (translation(30024), 'RunPlugin('+getPluginUrl()+'/?mode=favs&url='+urllib.quote_plus(playListInfos)+')',)])
     ok = xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]), url=u, listitem=liz, isFolder=True)
     return ok
 
@@ -413,7 +407,7 @@ def addShowRDir(name, url, mode, iconimage, args="", type=""):
     if useThumbAsFanart and not iconimage.split(os.sep)[-1].startswith("icon"):
         liz.setProperty("fanart_image", iconimage)
     playListInfos = "###MODE###=REMOVE###REFRESH###=TRUE###TITLE###="+name+"###URL###="+urllib.quote_plus(url)+"###THUMB###="+iconimage+"###END###"
-    liz.addContextMenuItems([(translation(30025), 'RunPlugin('+getPluginUrl()+'/?mode=favs&url='+urllib.quote_plus(playListInfos)+')',)])
+    liz.addContextMenuItems([(translation(30026), 'Container.Update('+getPluginUrl()+'/?mode=listSeasons&url='+urllib.quote_plus(url)+"&thumb="+urllib.quote_plus(iconimage)+')',), (translation(30025), 'RunPlugin('+getPluginUrl()+'/?mode=favs&url='+urllib.quote_plus(playListInfos)+')',)])
     ok = xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]), url=u, listitem=liz, isFolder=True)
     return ok
 
